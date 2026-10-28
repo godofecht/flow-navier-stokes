@@ -32,7 +32,7 @@ class SolverTest(unittest.TestCase):
     def test_rejects_invalid_inputs(self):
         for settings in ({"grid": 4}, {"until": -1}, {"dt": 0},
                          {"viscosity": -1}, {"density": 0},
-                         {"until": float("nan")}, {"dt": 2}):
+                         {"until": float("nan")}, {"dt": 2, "until": 2}):
             with self.subTest(settings=settings), self.assertRaises(ValueError):
                 simulate(**settings)
 
