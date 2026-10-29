@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: godofecht/FlowStudio
-          ref: ee7bf19e20b4cbd665a5895e6723a701acf0c6dc
+          ref: 97992dd98d5c260293201d4a4bb2009b8ab28046
           path: _flowstudio
           persist-credentials: false
       - uses: actions/setup-python@v5
