@@ -16,13 +16,13 @@ jobs:
           python-version: '3.11'
       - run: python -m pip install -r requirements.txt
       - name: Verify numerical solver and mathematical Flow execution
-        run: python -m unittest discover -s tests -v
+        run: python -m unittest discover -s tests -p 'test_solver.py' -v
       - name: Export real solver frames
         run: python build_site_data.py
       - name: Validate browser JavaScript
         run: node --check site/app.js
       - name: Verify exported frames
-        run: python -m unittest tests/test_site_data.py -v
+        run: python -m unittest discover -s tests -p 'test_site_data.py' -v
       - name: Configure Pages
         if: github.ref == 'refs/heads/main'
         uses: actions/configure-pages@v5
