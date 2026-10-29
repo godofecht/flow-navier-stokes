@@ -14,12 +14,23 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Checkout pinned mathematical Flow compiler
+        uses: actions/checkout@v4
+        with:
+          repository: godofecht/FlowStudio
+          ref: ee7bf19e20b4cbd665a5895e6723a701acf0c6dc
+          path: _flowstudio
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install -r requirements.txt
       - name: Run full numerical regression suite
         run: python -m unittest discover -s tests -v
+      - name: Compile checked-in Navier-Stokes Flow source
+        run: python _flowstudio/src/math_flow.py --check examples/navier_stokes.flow
+      - name: Execute checked-in Navier-Stokes Flow source
+        run: python _flowstudio/src/math_flow.py --grid 16 --until 0.001 examples/navier_stokes.flow
       - name: Execute real 2D Navier-Stokes simulation
         run: python solver.py --grid 32 --until 0.01 --dt 0.0001
       - name: Execute numerical semantic trace
