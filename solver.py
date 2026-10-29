@@ -6,8 +6,10 @@ import math
 
 import numpy as np
 
+from semantic_trace import event
 
-def simulate(grid=32, until=0.01, dt=0.0001, viscosity=0.001, density=1.0, shear=False):
+
+def simulate(grid=32, until=0.01, dt=0.0001, viscosity=0.001, density=1.0, shear=False, trace=False):
     if not isinstance(grid, int) or not 8 <= grid <= 512:
         raise ValueError("grid must be an integer in [8, 512]")
     if not all(math.isfinite(z) for z in (until, dt, viscosity, density)):
@@ -74,13 +76,32 @@ def simulate(grid=32, until=0.01, dt=0.0001, viscosity=0.001, density=1.0, shear
         return (-a * center(a, 0) - b * center(a, 1) + viscosity * laplace(a),
                 -a * center(b, 0) - b * center(b, 1) + viscosity * laplace(b))
 
+    events = []
     u, v, pressure = project(u, v)
+    if trace:
+        events.append(event(0, "initial", "pressure_projection",
+                            "Enforce the discrete incompressibility constraint",
+                            max_divergence=np.max(abs(divergence(u, v))),
+                            pressure_mean=pressure.mean()))
     energy_initial = float(0.5 * density * h*h * np.sum(u*u + v*v))
-    for _ in range(steps):
+    for step_index in range(steps):
         du, dv = rhs(u, v)
+        if trace:
+            events.append(event(step_index + 1, "predictor", "momentum_rhs",
+                                "Evaluate convective transport and viscous diffusion",
+                                rhs_rms=np.sqrt(np.mean(du*du + dv*dv))))
         stage_u, stage_v, _ = project(u + dt * du, v + dt * dv)
+        if trace:
+            events.append(event(step_index + 1, "predictor", "pressure_projection",
+                                "Remove predicted discrete divergence",
+                                max_divergence=np.max(abs(divergence(stage_u, stage_v)))))
         du2, dv2 = rhs(stage_u, stage_v)
         u, v, pressure = project(u + dt/2 * (du + du2), v + dt/2 * (dv + dv2))
+        if trace:
+            events.append(event(step_index + 1, "corrector", "rk2_projection",
+                                "Combine predictor and corrector derivatives and enforce incompressibility",
+                                kinetic_energy=0.5 * density * h*h * np.sum(u*u + v*v),
+                                max_divergence=np.max(abs(divergence(u, v)))))
         if not np.all(np.isfinite(u)) or not np.all(np.isfinite(v)):
             raise RuntimeError("non-finite solution")
 
@@ -92,6 +113,7 @@ def simulate(grid=32, until=0.01, dt=0.0001, viscosity=0.001, density=1.0, shear
         "pressure_mean": float(pressure.mean()),
         "vorticity_rms": float(np.sqrt(np.mean((center(v, 0) - center(u, 1))**2))),
         "shear": shear,
+        **({"semantic_trace": [item.to_dict() for item in events]} if trace else {}),
     }
 
 
@@ -102,10 +124,11 @@ def main():
     parser.add_argument("--dt", type=float, default=0.0001)
     parser.add_argument("--viscosity", type=float, default=0.001)
     parser.add_argument("--shear", action="store_true")
+    parser.add_argument("--trace", action="store_true", help="emit measured mathematical execution stages")
     args = parser.parse_args()
     try:
         print(json.dumps({"ok": True, **simulate(args.grid, args.until, args.dt,
-                            args.viscosity, shear=args.shear)}, sort_keys=True, allow_nan=False))
+                            args.viscosity, shear=args.shear, trace=args.trace)}, sort_keys=True, allow_nan=False))
     except (ValueError, RuntimeError) as error:
         parser.exit(2, f"Simulation failed: {error}\n")
 
