@@ -9,13 +9,15 @@ import numpy as np
 from semantic_trace import event
 
 
-def simulate(grid=32, until=0.01, dt=0.0001, viscosity=0.001, density=1.0, shear=False, trace=False):
+def simulate(grid=32, until=0.01, dt=0.0001, viscosity=0.001, density=1.0, shear=False, trace=False, snapshot_every=0):
     if not isinstance(grid, int) or not 8 <= grid <= 512:
         raise ValueError("grid must be an integer in [8, 512]")
     if not all(math.isfinite(z) for z in (until, dt, viscosity, density)):
         raise ValueError("parameters must be finite")
     if until <= 0 or dt <= 0 or viscosity < 0 or density <= 0:
         raise ValueError("invalid physical parameters")
+    if not isinstance(snapshot_every, int) or snapshot_every < 0:
+        raise ValueError('snapshot_every must be a nonnegative integer')
     steps = math.ceil(until / dt)
     if not 1 <= steps <= 200000:
         raise ValueError("integration step count out of range")
@@ -83,6 +85,16 @@ def simulate(grid=32, until=0.01, dt=0.0001, viscosity=0.001, density=1.0, shear
                             "Enforce the discrete incompressibility constraint",
                             max_divergence=np.max(abs(divergence(u, v))),
                             pressure_mean=pressure.mean()))
+    frames = []
+    def capture(step):
+        omega = center(v, 0) - center(u, 1)
+        frames.append({"step": step, "time": step * dt,
+                       "u": u.tolist(), "v": v.tolist(),
+                       "pressure": pressure.tolist(), "vorticity": omega.tolist(),
+                       "energy": float(0.5 * density * h*h * np.sum(u*u + v*v)),
+                       "max_divergence": float(np.max(abs(divergence(u, v))))})
+    if snapshot_every:
+        capture(0)
     energy_initial = float(0.5 * density * h*h * np.sum(u*u + v*v))
     for step_index in range(steps):
         du, dv = rhs(u, v)
@@ -102,6 +114,8 @@ def simulate(grid=32, until=0.01, dt=0.0001, viscosity=0.001, density=1.0, shear
                                 "Combine predictor and corrector derivatives and enforce incompressibility",
                                 kinetic_energy=0.5 * density * h*h * np.sum(u*u + v*v),
                                 max_divergence=np.max(abs(divergence(u, v)))))
+        if snapshot_every and ((step_index + 1) % snapshot_every == 0 or step_index + 1 == steps):
+            capture(step_index + 1)
         if not np.all(np.isfinite(u)) or not np.all(np.isfinite(v)):
             raise RuntimeError("non-finite solution")
 
@@ -113,6 +127,7 @@ def simulate(grid=32, until=0.01, dt=0.0001, viscosity=0.001, density=1.0, shear
         "pressure_mean": float(pressure.mean()),
         "vorticity_rms": float(np.sqrt(np.mean((center(v, 0) - center(u, 1))**2))),
         "shear": shear,
+        **({"frames": frames} if snapshot_every else {}),
         **({"semantic_trace": [item.to_dict() for item in events]} if trace else {}),
     }
 
