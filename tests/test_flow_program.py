@@ -31,6 +31,18 @@ class ExecutableFlowProgramTest(unittest.TestCase):
         self.assertEqual(result["steps"], 10)
         self.assertEqual(result["grid"], [16, 16])
         self.assertLess(result["max_divergence"], 1e-5)
+        trace = result["semantic_trace"]
+        self.assertEqual((trace["schema"], trace["field"]), (2, "velocity"))
+        self.assertEqual([stage["name"] for stage in trace["stages"]],
+                         ["initialSlope", "predictorSlope"])
+        for stage in trace["stages"]:
+            self.assertEqual([term["role"] for term in stage["terms"]],
+                             ["advection", "diffusion"])
+            self.assertLess(stage["maximumDecompositionResidual"], 1e-10)
+        self.assertEqual([entry["name"] for entry in trace["projections"]],
+                         ["initial", "predictor", "corrector"])
+        for entry in trace["projections"]:
+            self.assertLess(entry["maximumDivergenceAfter"], 1e-5)
         self.assertLess(abs(result["pressure_mean"]), 1e-8)
         reference = simulate(grid=16, until=0.001, dt=0.0001)
         self.assertLess(abs(result["kinetic_energy"] - reference["kinetic_energy"]), 1e-3)
@@ -47,6 +59,8 @@ class ExecutableFlowProgramTest(unittest.TestCase):
         ratio = result["kinetic_energy"] / result["initial_kinetic_energy"]
         self.assertLess(abs(ratio - target), 1e-5)
         self.assertLess(result["max_divergence"], 1e-8)
+        self.assertLess(result["semantic_trace"]["stages"][0]["terms"][0]
+                        ["maximumMagnitude"], 1e-10)
 
 
 if __name__ == "__main__":
